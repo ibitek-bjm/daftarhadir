@@ -1,0 +1,18 @@
+{
+  "id": "./",
+  "name": "Daftar Hadir Kuliah IBITEK",
+  "short_name": "Daftar Hadir",
+  "description": "Isi daftar hadir kuliah Institut Bisnis dan Teknologi Kalimantan.",
+  "lang": "id",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#fbfdea",
+  "theme_color": "#e4f000",
+  "icons": [
+    { "src": "ikon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "ikon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "ikon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
