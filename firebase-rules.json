@@ -1,0 +1,18 @@
+{
+  "rules": {
+    "matkul": {
+      ".read": true,
+      ".write": "auth != null"
+    },
+    "absensi": {
+      ".read": "auth != null",
+      "$mk": {
+        "$npm": {
+          ".write": "auth != null || (!data.exists() && root.child('matkul').child($mk).child('status').val() === 'buka')",
+          ".validate": "newData.hasChildren(['nama','npm','status','waktu']) && newData.child('nama').isString() && newData.child('nama').val().length >= 3 && newData.child('nama').val().length <= 80 && newData.child('npm').val() === $npm && newData.child('status').val().matches(/^(Hadir|Izin)$/) && newData.child('waktu').isNumber()",
+          "$other": { ".validate": false }
+        }
+      }
+    }
+  }
+}

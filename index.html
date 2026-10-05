@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Daftar Hadir Kuliah | IBITEK</title>
+<link rel="icon" href="logo.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top"><div class="top-in">
+  <img src="logo.png" alt="Logo IBITEK">
+  <div><h1>Daftar Hadir Kuliah</h1><p>Institut Bisnis dan Teknologi Kalimantan</p></div>
+</div></header>
+
+<main>
+  <section class="card" id="formCard">
+    <h2>Isi kehadiran</h2>
+    <p class="hint">Pilih mata kuliah, isi nama dan NPM, lalu pilih hadir atau izin.</p>
+    <form id="f" novalidate>
+      <label for="matkul">Mata kuliah</label>
+      <select id="matkul" required><option value="">Memuat…</option></select>
+
+      <label for="nama">Nama lengkap</label>
+      <input id="nama" autocomplete="name" maxlength="80" required>
+
+      <label for="npm">NPM</label>
+      <input id="npm" inputmode="numeric" autocomplete="off" maxlength="20" required>
+
+      <label>Keterangan</label>
+      <div class="pick">
+        <label><input type="radio" name="status" value="Hadir" checked><span>Hadir</span></label>
+        <label><input type="radio" name="status" value="Izin"><span>Izin</span></label>
+      </div>
+
+      <button class="btn full" id="kirim" type="submit">Kirim kehadiran</button>
+      <div id="msg" role="alert" hidden></div>
+    </form>
+  </section>
+
+  <section class="card done" id="doneCard" hidden>
+    <div class="tick">✓</div>
+    <h2>Kehadiran tercatat</h2>
+    <p id="doneTxt" class="hint"></p>
+    <button class="btn" id="lagi">Isi untuk orang lain</button>
+  </section>
+</main>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+<script src="firebase-config.js"></script>
+<script>
+let daftar = {};
+db.ref('matkul').on('value', snap => {
+  daftar = snap.val() || {};
+  const buka = Object.entries(daftar).filter(([, m]) => m.status === 'buka')
+    .sort((a, b) => b[1].tanggal.localeCompare(a[1].tanggal));
+  const cur = $('#matkul').value;
+  $('#matkul').innerHTML = buka.length
+    ? '<option value="">Pilih mata kuliah</option>' + buka.map(([id, m]) =>
+        `<option value="${esc(id)}">${esc(m.nama)} · ${esc(fmtTanggal(m.tanggal))}</option>`).join('')
+    : '<option value="">Belum ada absensi yang dibuka</option>';
+  if (cur && daftar[cur]?.status === 'buka') $('#matkul').value = cur;
+}, () => showMsg('Gagal memuat mata kuliah. Periksa koneksi internet.', 'err'));
+
+function showMsg(t, type) { const m = $('#msg'); m.textContent = t; m.className = 'msg ' + type; m.hidden = false; }
+
+$('#f').addEventListener('submit', e => {
+  e.preventDefault();
+  const id = $('#matkul').value, nama = $('#nama').value.trim().replace(/\s+/g, ' '),
+        npm = $('#npm').value.trim(), status = document.querySelector('[name=status]:checked').value;
+  if (!id) return showMsg('Pilih mata kuliah terlebih dahulu.', 'err');
+  if (nama.length < 3) return showMsg('Isi nama lengkap minimal 3 huruf.', 'err');
+  if (!/^\d{5,20}$/.test(npm)) return showMsg('NPM harus berupa angka (5–20 digit).', 'err');
+  $('#kirim').disabled = true;
+  db.ref(`absensi/${id}/${npm}`).set({ nama, npm, status, waktu: firebase.database.ServerValue.TIMESTAMP })
+    .then(() => {
+      $('#formCard').hidden = true; $('#doneCard').hidden = false;
+      $('#doneTxt').textContent = `${nama} (${npm}) tercatat ${status} di ${daftar[id]?.nama || 'mata kuliah ini'}.`;
+    })
+    .catch(() => showMsg('NPM ini sudah mengisi untuk mata kuliah tersebut, atau absensi sudah ditutup. Hubungi dosen jika ada kesalahan.', 'err'))
+    .finally(() => $('#kirim').disabled = false);
+});
+$('#lagi').onclick = () => {
+  $('#f').reset(); $('#msg').hidden = true;
+  $('#doneCard').hidden = true; $('#formCard').hidden = false;
+};
+</script>
+</body>
+</html>

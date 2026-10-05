@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Admin Daftar Hadir | IBITEK</title>
+<link rel="icon" href="logo.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top"><div class="top-in">
+  <img src="logo.png" alt="Logo IBITEK">
+  <div><h1>Admin Daftar Hadir</h1><p>Atur mata kuliah, tanggal, dan rekap kehadiran</p></div>
+</div></header>
+
+<main>
+  <section class="card" id="login">
+    <h2>Masuk admin</h2>
+    <p class="hint">Hanya untuk dosen atau pengelola kelas.</p>
+    <form id="lf">
+      <label for="em">Email</label><input id="em" type="email" autocomplete="username" required>
+      <label for="pw">Kata sandi</label><input id="pw" type="password" autocomplete="current-password" required>
+      <button class="btn full" type="submit">Masuk</button>
+      <div id="lmsg" class="msg err" role="alert" hidden></div>
+    </form>
+  </section>
+
+  <div id="app" hidden>
+    <section class="card">
+      <div class="bar"><h2>Link untuk mahasiswa</h2><button class="btn ghost" id="out">Keluar</button></div>
+      <p class="hint">Bagikan link ini ke grup kelas.</p>
+      <div class="share"><input id="link" readonly><button class="btn" id="salin">Salin</button></div>
+    </section>
+
+    <section class="card">
+      <h2>Tambah mata kuliah</h2>
+      <form id="mf">
+        <div class="row">
+          <div><label for="mn">Nama mata kuliah</label><input id="mn" maxlength="80" placeholder="Sistem Informasi" required></div>
+          <div><label for="mt">Tanggal</label><input id="mt" type="date" required></div>
+        </div>
+        <button class="btn full" type="submit">Simpan dan buka absensi</button>
+      </form>
+    </section>
+
+    <section class="card">
+      <h2>Daftar pertemuan</h2>
+      <p class="hint">Tutup absensi agar mahasiswa tidak bisa mengisi lagi.</p>
+      <div id="list"><p class="empty">Memuat…</p></div>
+    </section>
+
+    <section class="card" id="rekap" hidden>
+      <div class="bar"><h2 id="rt"></h2><button class="btn ghost" id="csv">Unduh CSV</button></div>
+      <div class="stat" id="rs"></div>
+      <div class="tbl"><table>
+        <thead><tr><th>Nama</th><th>NPM</th><th>Keterangan</th><th>Waktu</th><th></th></tr></thead>
+        <tbody id="rb"></tbody>
+      </table></div>
+    </section>
+  </div>
+</main>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="firebase-config.js"></script>
+<script>
+const auth = firebase.auth();
+let M = {}, ref = null, aktif = null, rows = [], started = false;
+
+$('#lf').addEventListener('submit', e => {
+  e.preventDefault();
+  auth.signInWithEmailAndPassword($('#em').value.trim(), $('#pw').value)
+    .catch(() => { const m = $('#lmsg'); m.textContent = 'Email atau kata sandi salah.'; m.hidden = false; });
+});
+$('#out').onclick = () => auth.signOut();
+
+auth.onAuthStateChanged(u => {
+  $('#login').hidden = !!u; $('#app').hidden = !u;
+  if (u && !started) { started = true; init(); }
+});
+
+function init() {
+  $('#link').value = location.href.replace(/admin\.html.*$/, '') + 'index.html';
+  $('#mt').valueAsDate = new Date();
+  db.ref('matkul').on('value', s => { M = s.val() || {}; renderList(); });
+}
+
+$('#salin').onclick = () => { navigator.clipboard.writeText($('#link').value); $('#salin').textContent = 'Tersalin'; setTimeout(() => $('#salin').textContent = 'Salin', 1500); };
+
+$('#mf').addEventListener('submit', e => {
+  e.preventDefault();
+  db.ref('matkul').push({ nama: $('#mn').value.trim(), tanggal: $('#mt').value, status: 'buka', dibuat: firebase.database.ServerValue.TIMESTAMP })
+    .then(() => { $('#mn').value = ''; });
+});
+
+function renderList() {
+  const items = Object.entries(M).sort((a, b) => b[1].tanggal.localeCompare(a[1].tanggal));
+  $('#list').innerHTML = items.length ? items.map(([id, m]) => `
+    <div class="mk">
+      <div><b>${esc(m.nama)}</b><span class="badge ${m.status}">${m.status === 'buka' ? 'Dibuka' : 'Ditutup'}</span>
+        <small>${esc(fmtTanggal(m.tanggal))}</small></div>
+      <div class="acts" data-id="${esc(id)}">
+        <button class="btn ghost" data-a="rekap">Lihat rekap</button>
+        <button class="btn ghost" data-a="toggle">${m.status === 'buka' ? 'Tutup absensi' : 'Buka lagi'}</button>
+        <button class="btn ghost danger" data-a="hapus">Hapus</button>
+      </div>
+    </div>`).join('') : '<p class="empty">Belum ada mata kuliah. Tambahkan lewat formulir di atas.</p>';
+  if (aktif && !M[aktif]) { tutupRekap(); }
+}
+
+$('#list').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  const id = b.parentElement.dataset.id, a = b.dataset.a;
+  if (a === 'rekap') bukaRekap(id);
+  if (a === 'toggle') db.ref(`matkul/${id}/status`).set(M[id].status === 'buka' ? 'tutup' : 'buka');
+  if (a === 'hapus' && confirm(`Hapus "${M[id].nama}" beserta seluruh data kehadirannya?`)) {
+    db.ref(`absensi/${id}`).remove().then(() => db.ref(`matkul/${id}`).remove());
+  }
+});
+
+function bukaRekap(id) {
+  if (ref) ref.off();
+  aktif = id; ref = db.ref(`absensi/${id}`);
+  $('#rekap').hidden = false;
+  $('#rt').textContent = `${M[id].nama} · ${fmtTanggal(M[id].tanggal)}`;
+  ref.on('value', s => {
+    rows = Object.values(s.val() || {}).sort((a, b) => a.nama.localeCompare(b.nama));
+    const h = rows.filter(r => r.status === 'Hadir').length;
+    $('#rs').innerHTML = `<div>Total ${rows.length}</div><div style="color:var(--leaf)">Hadir ${h}</div><div style="color:var(--rust)">Izin ${rows.length - h}</div>`;
+    $('#rb').innerHTML = rows.length ? rows.map(r => `<tr>
+      <td>${esc(r.nama)}</td><td>${esc(r.npm)}</td><td><span class="tag ${esc(r.status)}">${esc(r.status)}</span></td>
+      <td>${r.waktu ? new Date(r.waktu).toLocaleString('id-ID', {dateStyle:'short', timeStyle:'short'}) : ''}</td>
+      <td><button class="btn ghost danger" data-npm="${esc(r.npm)}">Hapus</button></td></tr>`).join('')
+      : '<tr><td colspan="5" class="empty">Belum ada yang mengisi.</td></tr>';
+  });
+  $('#rekap').scrollIntoView({ behavior: 'smooth' });
+}
+function tutupRekap() { if (ref) ref.off(); ref = null; aktif = null; $('#rekap').hidden = true; }
+
+$('#rb').addEventListener('click', e => {
+  const b = e.target.closest('button[data-npm]');
+  if (b && confirm('Hapus data kehadiran ini?')) db.ref(`absensi/${aktif}/${b.dataset.npm}`).remove();
+});
+
+$('#csv').onclick = () => {
+  const q = v => '"' + String(v).replace(/"/g, '""') + '"';
+  const out = ['Nama,NPM,Keterangan,Waktu', ...rows.map(r => [r.nama, r.npm, r.status, r.waktu ? new Date(r.waktu).toLocaleString('id-ID') : ''].map(q).join(','))].join('\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob(['\ufeff' + out], { type: 'text/csv' }));
+  a.download = `kehadiran-${M[aktif].nama}-${M[aktif].tanggal}.csv`.replace(/\s+/g, '-');
+  a.click();
+};
+</script>
+</body>
+</html>
